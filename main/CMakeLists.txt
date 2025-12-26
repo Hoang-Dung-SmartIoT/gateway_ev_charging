@@ -9,7 +9,8 @@ idf_component_register(
         nvs_flash
         ethernet_init
         gpio_ctrl 
-        ds3231 
+        ds3231
+        wifi_manager
 )
 
 
