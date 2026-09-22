@@ -1407,6 +1407,7 @@ static esp_err_t mqtt_publish_status_gateway(void)
     int len = snprintf(payload, sizeof(payload),
                        "{"
                        "\"ts\":%u,"
+                       "\"version\":\"%s\","
                        "\"summary\":{"
                        "\"active_ports\":%d,"
                        "\"total_power\":%.0f,"
@@ -1415,6 +1416,7 @@ static esp_err_t mqtt_publish_status_gateway(void)
                        "}"
                        "}",
                        (unsigned)ts,
+                       ota_manager_current_version(),
                        active_ports,
                        total_power_w,
                        grid_voltage,
