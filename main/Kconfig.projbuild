@@ -1,5 +1,14 @@
 menu "Example Configuration"
 
+    menu "Gateway OTA Configuration"
+        config GATEWAY_OTA_MANIFEST_URL
+            string "Default HTTPS OTA manifest URL"
+            default "https://raw.githubusercontent.com/Hoang-Dung-SmartIoT/gateway_ev_charging/ota_gateway/ota_manifest.json"
+            help
+                Public HTTPS URL of the OTA JSON manifest stored on GitHub.
+                MQTT can trigger a check but cannot override this trusted URL.
+    endmenu
+
     menu "SoftAP Configuration"
         comment "SoftAP Configuration"
 

@@ -25,6 +25,7 @@
 #include "gateway_config.h"
 #include "gw_time.h"
 #include "gw_temp.h"
+#include "ota_manager.h"
 
 #define WIFI_RESET_BUTTON_GPIO 41
 #define WIFI_RESET_HOLD_TIME_MS 10000
@@ -79,6 +80,39 @@ static volatile uint32_t s_last_puback_ms = 0;
 static inline uint32_t now_ms(void)
 {
     return (uint32_t)(esp_timer_get_time() / 1000ULL);
+}
+
+static void ota_status_publish(const char *request_id,
+                               const char *state,
+                               const char *current_version,
+                               const char *available_version,
+                               const char *detail)
+{
+    if (!mqtt_client)
+        return;
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root)
+        return;
+
+    if (request_id && request_id[0] != '\0')
+        cJSON_AddStringToObject(root, "id", request_id);
+    cJSON_AddStringToObject(root, "state", state ? state : "unknown");
+    cJSON_AddStringToObject(root, "current_version", current_version ? current_version : "");
+    if (available_version && available_version[0] != '\0')
+        cJSON_AddStringToObject(root, "available_version", available_version);
+    if (detail && detail[0] != '\0')
+        cJSON_AddStringToObject(root, "detail", detail);
+
+    char *json = cJSON_PrintUnformatted(root);
+    if (json)
+    {
+        char topic[128];
+        snprintf(topic, sizeof(topic), "tbmq/%s/ota/status", gateway_config_device_id());
+        esp_mqtt_client_publish(mqtt_client, topic, json, 0, 1, 0);
+        free(json);
+    }
+    cJSON_Delete(root);
 }
 
 static esp_err_t build_slave_list_from_nvs(void)
@@ -268,6 +302,11 @@ static void net_monitor_task(void *arg)
         if (any_online && !last_any_online)
         {
             ESP_LOGI("NET", "Internet UP -> init time + start MQTT");
+
+            esp_err_t ota_confirm_err = ota_manager_confirm_running_image();
+            if (ota_confirm_err != ESP_OK)
+                ESP_LOGW("OTA", "Could not confirm running image: %s",
+                         esp_err_to_name(ota_confirm_err));
 
             // SNTP/time sync: chỉ gọi khi vừa có mạng lần đầu
             gw_time_init();
@@ -606,6 +645,26 @@ static void mqtt_event_handler(void *handler_args,
         }
 
         const char *cmd = cmd_obj->valuestring;
+
+        /* Run OTA outside the MQTT callback to keep the client responsive. */
+        if (strcmp(cmd, "check_ota") == 0 || strcmp(cmd, "ota_check") == 0)
+        {
+            const char *request_id =
+                (cJSON_IsString(id) && id->valuestring) ? id->valuestring : "";
+            esp_err_t ota_err = ota_manager_start(NULL, request_id, false);
+            if (ota_err != ESP_OK)
+            {
+                ota_status_publish(request_id,
+                                   "error",
+                                   ota_manager_current_version(),
+                                   "",
+                                   ota_err == ESP_ERR_INVALID_STATE
+                                       ? "ota_already_running"
+                                       : esp_err_to_name(ota_err));
+            }
+            cJSON_Delete(json);
+            break;
+        }
 
         /* ==========================================================
            3) CMD: config_device  -> update NVS -> restart
@@ -1423,6 +1482,7 @@ static void mqtt_publish_gateway_status_task(void *pvParameters)
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
+    ota_manager_init(ota_status_publish);
     ESP_ERROR_CHECK(gateway_config_init());
     ESP_ERROR_CHECK(build_slave_list_from_nvs());
     ESP_ERROR_CHECK(esp_netif_init());
