@@ -11,7 +11,7 @@ static const char *NVS_NS_FALLBACK = "gwcfg";
 
 static gateway_config_t s_cfg = {
     .device_id = "cs_000001",
-    .number_device = 1,
+    .number_device = 4,
 
     .mqtt_uri = "mqtt://72.61.140.234:1883",
     .mqtt_user = "thuanphat",
