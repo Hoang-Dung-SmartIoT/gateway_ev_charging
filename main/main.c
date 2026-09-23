@@ -997,8 +997,12 @@ static void mqtt_publish_task(void *pvParameters)
                 if (msg_id >= 0)
                 {
                     ESP_LOGI("MQTT", "Published msg_id=%d topic=%s payload=%s", msg_id, topic, payload);
-                    // Publish (giữ đúng style cũ)
-                    status_led_pulse_green(500);
+                    // Green LED represents a valid RS485/PZEM response, not
+                    // merely a successful MQTT publish of "No Response".
+                    if (ok)
+                    {
+                        status_led_pulse_green(500);
+                    }
                     gateway_set_state(GW_STATE_SENDING_DATA);
                 }
                 else
@@ -1467,13 +1471,9 @@ static void mqtt_publish_gateway_status_task(void *pvParameters)
             continue;
         }
 
-        // Publish summary/status gateway
-        if (mqtt_publish_status_gateway() == ESP_OK)
-        {
-            // bạn muốn thì set state riêng
-            // gateway_set_state(GW_STATE_SENDING_GW_STATUS);
-            status_led_pulse_green(250);
-        }
+        // Gateway summary is unrelated to a fresh RS485 response, so it must
+        // not trigger the green activity LED.
+        (void)mqtt_publish_status_gateway();
 
         // chu kỳ status gateway (khuyến nghị chậm hơn port telemetry)
         vTaskDelay(pdMS_TO_TICKS(30000));
